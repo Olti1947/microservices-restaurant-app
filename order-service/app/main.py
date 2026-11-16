@@ -9,7 +9,15 @@ from pymongo import ReturnDocument
 
 from app.clients import MenuUnavailable, get_menu_item
 from app.db import orders
-from app.models import Order, OrderCreate, OrderStatus, PayResult, StatusUpdate
+from app.models import (
+    STATUS_FLOW,
+    Order,
+    OrderCreate,
+    OrderStatus,
+    PayRequest,
+    PayResult,
+    StatusUpdate,
+)
 from app.sockets import sio
 
 # The REST API. At the bottom of this file it is combined with Socket.IO into `app`.
@@ -25,7 +33,15 @@ api.add_middleware(
 
 def to_order(doc: dict) -> Order:
     """Turn a Mongo document into the API model (ObjectId -> string id)."""
-    return Order(id=str(doc["_id"]), **{k: v for k, v in doc.items() if k != "_id"})
+    return Order(
+        id=str(doc["_id"]),
+        table_number=doc["table_number"],
+        items=doc["items"],
+        total=doc["total"],
+        status=doc["status"],
+        paid=doc["paid"],
+        created_at=doc["created_at"],
+    )
 
 
 def parse_order_id(order_id: str) -> ObjectId:
@@ -41,6 +57,9 @@ async def create_order(order: OrderCreate):
     # the menu prices, never from prices sent by the client.
     items = []
     for line in order.items:
+        # Menu item ids are Mongo ObjectIds; anything else can't be on the menu.
+        if not ObjectId.is_valid(line.item_id):
+            raise HTTPException(status_code=400, detail=f"Unknown menu item: {line.item_id}")
         try:
             menu_item = await get_menu_item(line.item_id)
         except MenuUnavailable:
@@ -107,13 +126,24 @@ async def get_order(order_id: str):
 
 @api.patch("/orders/{order_id}/status", response_model=Order)
 async def update_status(order_id: str, update: StatusUpdate):
+    object_id = parse_order_id(order_id)
+
+    # Statuses only move forward one step: received -> preparing -> ready -> served.
+    position = STATUS_FLOW.index(update.status)
+    previous = STATUS_FLOW[position - 1] if position > 0 else None
     doc = await orders.find_one_and_update(
-        {"_id": parse_order_id(order_id)},
+        {"_id": object_id, "status": previous},
         {"$set": {"status": update.status}},
         return_document=ReturnDocument.AFTER,
     )
     if doc is None:
-        raise HTTPException(status_code=404, detail="Order not found")
+        current = await orders.find_one({"_id": object_id})
+        if current is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Order is '{current['status']}' and can't move to '{update.status}'",
+        )
     order = to_order(doc)
 
     # The diner's table and the kitchen both see the new status live.
@@ -124,13 +154,23 @@ async def update_status(order_id: str, update: StatusUpdate):
 
 
 @api.post("/orders/pay", response_model=PayResult)
-async def pay_orders(table_number: int):
-    """Mark all unpaid orders of a table as paid. Called by the Payment service."""
+async def pay_orders(body: PayRequest):
+    """Mark the given unpaid orders of a table as paid. Called by the Payment service.
+
+    Only the orders that were on the bill are marked, so an order placed after the
+    bill was built stays unpaid and shows up on the next bill.
+    """
+    if not all(ObjectId.is_valid(order_id) for order_id in body.order_ids):
+        raise HTTPException(status_code=400, detail="Invalid order id")
     result = await orders.update_many(
-        {"table_number": table_number, "paid": False},
+        {
+            "_id": {"$in": [ObjectId(order_id) for order_id in body.order_ids]},
+            "table_number": body.table_number,
+            "paid": False,
+        },
         {"$set": {"paid": True}},
     )
-    return PayResult(table_number=table_number, orders_paid=result.modified_count)
+    return PayResult(table_number=body.table_number, orders_paid=result.modified_count)
 
 
 # Socket.IO and REST share one port: Socket.IO answers /socket.io/ requests

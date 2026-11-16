@@ -3,11 +3,27 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class BillItem(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+
+class BillOrder(BaseModel):
+    """One unpaid order, with the fields the bill needs from the Order service."""
+
+    id: str
+    items: list[BillItem]
+    total: float
+    status: str
+    created_at: datetime
+
+
 class Bill(BaseModel):
-    """What a table owes: its unpaid orders (as returned by the Order service) and the sum."""
+    """What a table owes: its unpaid orders and their sum."""
 
     table_number: int
-    orders: list[dict]
+    orders: list[BillOrder]
     total: float
 
 

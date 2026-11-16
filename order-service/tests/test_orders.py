@@ -69,12 +69,51 @@ def test_update_status(client, menu):
     assert client.patch(f"/orders/{order['id']}/status", json={"status": "eaten"}).status_code == 422
 
 
-def test_pay_marks_table_orders_paid(client, menu):
-    place_order(client, table_number=5)
-    place_order(client, table_number=5)
+def test_status_only_moves_one_step_forward(client, menu):
+    order = place_order(client).json()
+    url = f"/orders/{order['id']}/status"
+    # Skipping a step is refused.
+    assert client.patch(url, json={"status": "ready"}).status_code == 409
+    for status in ("preparing", "ready", "served"):
+        assert client.patch(url, json={"status": status}).status_code == 200
+    # Going back, or repeating the same status, is refused.
+    assert client.patch(url, json={"status": "received"}).status_code == 409
+    assert client.patch(url, json={"status": "served"}).status_code == 409
+    assert client.patch("/orders/000000000000000000000000/status", json={"status": "preparing"}).status_code == 404
+
+
+def test_malformed_item_id_returns_400(client, menu):
+    for item_id in ("", "not-an-id", "?category=main"):
+        body = {"table_number": 1, "items": [{"item_id": item_id, "quantity": 1}]}
+        assert client.post("/orders", json=body).status_code == 400
+
+
+def test_pay_marks_only_the_billed_orders(client, menu):
+    first = place_order(client, table_number=5).json()
+    second = place_order(client, table_number=5).json()
     place_order(client, table_number=7)
 
-    response = client.post("/orders/pay", params={"table_number": 5})
+    response = client.post("/orders/pay", json={"table_number": 5, "order_ids": [first["id"], second["id"]]})
     assert response.json() == {"table_number": 5, "orders_paid": 2}
     assert client.get("/orders", params={"table_number": 5, "paid": False}).json() == []
     assert len(client.get("/orders", params={"paid": False}).json()) == 1
+
+
+def test_order_placed_after_the_bill_stays_unpaid(client, menu):
+    billed = place_order(client, table_number=5).json()
+    late = place_order(client, table_number=5).json()  # placed after the bill was built
+
+    client.post("/orders/pay", json={"table_number": 5, "order_ids": [billed["id"]]})
+    unpaid = client.get("/orders", params={"table_number": 5, "paid": False}).json()
+    assert [o["id"] for o in unpaid] == [late["id"]]
+
+
+def test_pay_ignores_other_tables_and_paid_orders(client, menu):
+    order = place_order(client, table_number=7).json()
+    body = {"table_number": 5, "order_ids": [order["id"]]}
+    assert client.post("/orders/pay", json=body).json()["orders_paid"] == 0
+
+    body["table_number"] = 7
+    assert client.post("/orders/pay", json=body).json()["orders_paid"] == 1
+    assert client.post("/orders/pay", json=body).json()["orders_paid"] == 0
+    assert client.post("/orders/pay", json={"table_number": 7, "order_ids": ["bad"]}).status_code == 400

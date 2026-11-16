@@ -1,3 +1,5 @@
+import json
+
 import httpx
 
 from app.clients import ORDER_URL, TABLE_URL
@@ -25,7 +27,8 @@ def test_pay_records_payment_and_calls_services(client, services):
 
     assert services.calls.call_count == 3  # bill, mark paid, free table
     paid_call, free_call = services.calls[1].request, services.calls[2].request
-    assert str(paid_call.url) == f"{ORDER_URL}/orders/pay?table_number=5"
+    assert str(paid_call.url) == f"{ORDER_URL}/orders/pay"
+    assert json.loads(paid_call.content) == {"table_number": 5, "order_ids": ["o1", "o2"]}
     assert str(free_call.url) == f"{TABLE_URL}/tables/5/free"
 
     assert client.get("/payments", params={"table_number": 5}).json() == [payment]
@@ -42,3 +45,17 @@ def test_order_service_down_returns_503(client, services):
     assert client.get("/bills/5").status_code == 503
     assert client.post("/payments", json={"table_number": 5}).status_code == 503
     assert client.get("/payments").json() == []
+
+
+def test_bill_changed_meanwhile_returns_409(client, services):
+    # Order only marks one of the two orders: the other was paid in the meantime.
+    services.post(f"{ORDER_URL}/orders/pay").respond(200, json={"table_number": 5, "orders_paid": 1})
+    assert client.post("/payments", json={"table_number": 5}).status_code == 409
+    assert client.get("/payments").json() == []
+
+
+def test_payment_succeeds_even_if_table_service_is_down(client, services):
+    services.post(url__regex=rf"{TABLE_URL}/tables/\d+/free").mock(side_effect=httpx.ConnectError("down"))
+    response = client.post("/payments", json={"table_number": 5})
+    assert response.status_code == 201
+    assert len(client.get("/payments").json()) == 1

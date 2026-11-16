@@ -16,9 +16,13 @@ from app.main import app  # noqa: E402
 mongo = MongoClient(MONGO_URL)
 
 # Two unpaid orders for table 5, as the Order service would return them.
+PIZZA = {"item_id": "a1", "name": "Pizza", "price": 9.5, "quantity": 2}
+COLA = {"item_id": "b2", "name": "Cola", "price": 2.5, "quantity": 3}
 TABLE_5_ORDERS = [
-    {"id": "o1", "table_number": 5, "items": [], "total": 19.0, "status": "served", "paid": False},
-    {"id": "o2", "table_number": 5, "items": [], "total": 7.5, "status": "served", "paid": False},
+    {"id": "o1", "table_number": 5, "items": [PIZZA], "total": 19.0, "status": "served",
+     "paid": False, "created_at": "2026-11-16T12:00:00Z"},
+    {"id": "o2", "table_number": 5, "items": [COLA], "total": 7.5, "status": "served",
+     "paid": False, "created_at": "2026-11-16T12:05:00Z"},
 ]
 
 

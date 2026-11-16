@@ -14,6 +14,8 @@ from app.db import MONGO_URL  # noqa: E402
 from app.main import app  # noqa: E402
 from app.sockets import sio  # noqa: E402
 
+mongo = MongoClient(MONGO_URL)
+
 PIZZA = {"id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Pizza", "price": 9.5, "category": "main"}
 COLA = {"id": "bbbbbbbbbbbbbbbbbbbbbbbb", "name": "Cola", "price": 2.5, "category": "drink"}
 
@@ -22,12 +24,12 @@ COLA = {"id": "bbbbbbbbbbbbbbbbbbbbbbbb", "name": "Cola", "price": 2.5, "categor
 def client():
     with TestClient(app) as test_client:
         yield test_client
-    MongoClient(MONGO_URL).drop_database("order_db_test")
+    mongo.drop_database("order_db_test")
 
 
 @pytest.fixture(autouse=True)
 def clean_orders():
-    MongoClient(MONGO_URL)["order_db_test"]["orders"].delete_many({})
+    mongo["order_db_test"]["orders"].delete_many({})
 
 
 @pytest.fixture

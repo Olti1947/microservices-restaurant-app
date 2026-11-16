@@ -1,4 +1,9 @@
+import re
+
 import socketio
+
+# Allowed rooms: "kitchen" or "table-" followed by a table number.
+ROOM_PATTERN = re.compile(r"kitchen|table-\d+")
 
 # Socket.IO server for live updates. Clients join a room:
 #   "kitchen"   - kitchen screens, get every new order and status change
@@ -15,7 +20,7 @@ async def connect(sid, environ):
 async def join(sid, data):
     """Client sends {"room": "kitchen"} or {"room": "table-5"}."""
     room = data.get("room") if isinstance(data, dict) else None
-    if room != "kitchen" and not (isinstance(room, str) and room.startswith("table-")):
+    if not isinstance(room, str) or not ROOM_PATTERN.fullmatch(room):
         return {"ok": False, "error": "room must be 'kitchen' or 'table-<number>'"}
     await sio.enter_room(sid, room)
     print(f"Socket {sid} joined {room}")

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 # The order moves through these statuses in this order.
 OrderStatus = Literal["received", "preparing", "ready", "served"]
+STATUS_FLOW = ["received", "preparing", "ready", "served"]
 
 
 class OrderItemCreate(BaseModel):
@@ -42,6 +43,13 @@ class StatusUpdate(BaseModel):
     """Body of PATCH /orders/{id}/status."""
 
     status: OrderStatus
+
+
+class PayRequest(BaseModel):
+    """Body of POST /orders/pay: the orders that were on the bill the diner paid."""
+
+    table_number: int
+    order_ids: list[str] = Field(min_length=1)
 
 
 class PayResult(BaseModel):
