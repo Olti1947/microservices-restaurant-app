@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.clients import MENU_URL  # noqa: E402
 from app.db import MONGO_URL  # noqa: E402
 from app.main import app  # noqa: E402
+from app.sockets import sio  # noqa: E402
 
 PIZZA = {"id": "aaaaaaaaaaaaaaaaaaaaaaaa", "name": "Pizza", "price": 9.5, "category": "main"}
 COLA = {"id": "bbbbbbbbbbbbbbbbbbbbbbbb", "name": "Cola", "price": 2.5, "category": "drink"}
@@ -37,3 +38,15 @@ def menu():
         mock.get(f"/menu/{COLA['id']}").respond(200, json=COLA)
         mock.get(path__startswith="/menu/").respond(404, json={"detail": "Menu item not found"})
         yield mock
+
+
+@pytest.fixture
+def emitted(monkeypatch):
+    """Record Socket.IO events instead of sending them: list of (event, data, room)."""
+    events = []
+
+    async def fake_emit(event, data, room=None):
+        events.append((event, data, room))
+
+    monkeypatch.setattr(sio, "emit", fake_emit)
+    return events
