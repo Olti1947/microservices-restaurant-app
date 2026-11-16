@@ -1,0 +1,61 @@
+services:
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"   # so tests and tools on the host can reach it
+    volumes:
+      - mongo-data:/data/db
+
+  table-service:
+    build: ./table-service
+    ports:
+      - "8001:8000"
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+    depends_on:
+      - mongo
+
+  menu-service:
+    build: ./menu-service
+    ports:
+      - "8002:8000"
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+    depends_on:
+      - mongo
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "8003:8000"
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      MENU_URL: http://menu-service:8000
+    depends_on:
+      - mongo
+      - menu-service
+
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "8004:8000"
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      ORDER_URL: http://order-service:8000
+      TABLE_URL: http://table-service:8000
+    depends_on:
+      - mongo
+      - order-service
+      - table-service
+
+  kitchen-screen:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./kitchen-screen:/usr/share/nginx/html:ro
+    depends_on:
+      - order-service
+
+volumes:
+  mongo-data:
