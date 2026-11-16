@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kitchen</title>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/dist/socket.io.min.js"></script>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f2f2f2; color: #222; }
+    header { display: flex; justify-content: space-between; align-items: center;
+             padding: 12px 20px; background: #222; color: #fff; }
+    header h1 { margin: 0; font-size: 20px; }
+    #connection { font-size: 14px; }
+    main { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; }
+    h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; color: #555; }
+    .order { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px;
+             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+    .order h3 { margin: 0 0 6px; display: flex; justify-content: space-between; font-size: 18px; }
+    .order time { font-size: 13px; font-weight: normal; color: #777; }
+    .order ul { margin: 0 0 10px; padding-left: 18px; }
+    .order button { width: 100%; padding: 8px; border: 0; border-radius: 6px; font-size: 15px;
+                    cursor: pointer; color: #fff; background: #2a7d4f; }
+    .new { animation: flash 1.5s; }
+    @keyframes flash { from { background: #fff3b0; } to { background: #fff; } }
+    @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Kitchen orders</h1>
+    <span id="connection">Connecting…</span>
+  </header>
+  <main>
+    <section><h2>Received</h2><div id="received"></div></section>
+    <section><h2>Preparing</h2><div id="preparing"></div></section>
+    <section><h2>Ready</h2><div id="ready"></div></section>
+  </main>
+
+  <script>
+    // The Order service runs on port 8003 of the same machine that serves this page.
+    const ORDER_URL = `http://${location.hostname}:8003`;
+
+    // What the button on each column does: move the order to the next status.
+    const NEXT = {
+      received: { status: "preparing", label: "Start preparing" },
+      preparing: { status: "ready", label: "Mark ready" },
+      ready: { status: "served", label: "Mark served" },
+    };
+
+    // All orders on screen, by id.
+    const orders = {};
+
+    function render() {
+      for (const status of Object.keys(NEXT)) {
+        document.getElementById(status).innerHTML = "";
+      }
+      // Oldest first, so the kitchen works through orders in the order they came in.
+      const sorted = Object.values(orders).sort((a, b) => a.created_at.localeCompare(b.created_at));
+      for (const order of sorted) {
+        const column = document.getElementById(order.status);
+        if (column) column.appendChild(orderCard(order));
+      }
+    }
+
+    function orderCard(order) {
+      const card = document.createElement("div");
+      card.className = order.isNew ? "order new" : "order";
+      order.isNew = false;
+
+      const time = new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      card.innerHTML = `<h3>Table ${order.table_number} <time>${time}</time></h3><ul></ul>`;
+      for (const item of order.items) {
+        const li = document.createElement("li");
+        li.textContent = `${item.quantity} × ${item.name}`;
+        card.querySelector("ul").appendChild(li);
+      }
+
+      const button = document.createElement("button");
+      button.textContent = NEXT[order.status].label;
+      button.onclick = () => setStatus(order.id, NEXT[order.status].status);
+      card.appendChild(button);
+      return card;
+    }
+
+    async function setStatus(id, status) {
+      const response = await fetch(`${ORDER_URL}/orders/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) console.error(`Could not update order ${id}: ${response.status}`);
+      // No need to update the screen here: the server sends "order-status" to the kitchen room.
+    }
+
+    async function loadOrders() {
+      const response = await fetch(`${ORDER_URL}/orders`);
+      for (const order of await response.json()) {
+        if (order.status !== "served") orders[order.id] = order;
+      }
+      render();
+    }
+
+    // Live updates over Socket.IO.
+    const socket = io(ORDER_URL);
+    const connection = document.getElementById("connection");
+
+    socket.on("connect", () => {
+      connection.textContent = "● Live";
+      socket.emit("join", { room: "kitchen" });
+      loadOrders(); // also reloads after a reconnect, in case we missed something
+    });
+    socket.on("disconnect", () => (connection.textContent = "○ Disconnected"));
+
+    socket.on("new-order", (order) => {
+      orders[order.id] = { ...order, isNew: true };
+      render();
+    });
+
+    socket.on("order-status", ({ id, status }) => {
+      if (!orders[id]) return;
+      if (status === "served") delete orders[id];
+      else orders[id].status = status;
+      render();
+    });
+  </script>
+</body>
+</html>

@@ -2,6 +2,7 @@ fastapi==0.163.1
 uvicorn[standard]==0.54.0
 pymongo==4.20.0
 httpx==0.28.1
+python-socketio==5.18.1
 
 # tests
 pytest==9.2.0

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
+import socketio
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import ReturnDocument
@@ -9,10 +10,12 @@ from pymongo import ReturnDocument
 from app.clients import MenuUnavailable, get_menu_item
 from app.db import orders
 from app.models import Order, OrderCreate, OrderStatus, PayResult, StatusUpdate
+from app.sockets import sio
 
-app = FastAPI(title="Order service")
+# The REST API. At the bottom of this file it is combined with Socket.IO into `app`.
+api = FastAPI(title="Order service")
 
-app.add_middleware(
+api.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
@@ -32,7 +35,7 @@ def parse_order_id(order_id: str) -> ObjectId:
         raise HTTPException(status_code=404, detail="Order not found")
 
 
-@app.post("/orders", response_model=Order, status_code=201)
+@api.post("/orders", response_model=Order, status_code=201)
 async def create_order(order: OrderCreate):
     # Look up every item in the Menu service. The total is computed here from
     # the menu prices, never from prices sent by the client.
@@ -68,10 +71,14 @@ async def create_order(order: OrderCreate):
     }
     result = await orders.insert_one(doc)
     doc["_id"] = result.inserted_id
-    return to_order(doc)
+    new_order = to_order(doc)
+
+    # Tell every kitchen screen about the new order right away.
+    await sio.emit("new-order", new_order.model_dump(mode="json"), room="kitchen")
+    return new_order
 
 
-@app.get("/orders", response_model=list[Order])
+@api.get("/orders", response_model=list[Order])
 async def list_orders(
     table_number: int | None = None,
     paid: bool | None = None,
@@ -90,7 +97,7 @@ async def list_orders(
     return [to_order(doc) for doc in docs]
 
 
-@app.get("/orders/{order_id}", response_model=Order)
+@api.get("/orders/{order_id}", response_model=Order)
 async def get_order(order_id: str):
     doc = await orders.find_one({"_id": parse_order_id(order_id)})
     if doc is None:
@@ -98,7 +105,7 @@ async def get_order(order_id: str):
     return to_order(doc)
 
 
-@app.patch("/orders/{order_id}/status", response_model=Order)
+@api.patch("/orders/{order_id}/status", response_model=Order)
 async def update_status(order_id: str, update: StatusUpdate):
     doc = await orders.find_one_and_update(
         {"_id": parse_order_id(order_id)},
@@ -107,10 +114,16 @@ async def update_status(order_id: str, update: StatusUpdate):
     )
     if doc is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    return to_order(doc)
+    order = to_order(doc)
+
+    # The diner's table and the kitchen both see the new status live.
+    event = {"id": order.id, "table_number": order.table_number, "status": order.status}
+    await sio.emit("order-status", event, room=f"table-{order.table_number}")
+    await sio.emit("order-status", event, room="kitchen")
+    return order
 
 
-@app.post("/orders/pay", response_model=PayResult)
+@api.post("/orders/pay", response_model=PayResult)
 async def pay_orders(table_number: int):
     """Mark all unpaid orders of a table as paid. Called by the Payment service."""
     result = await orders.update_many(
@@ -118,3 +131,8 @@ async def pay_orders(table_number: int):
         {"$set": {"paid": True}},
     )
     return PayResult(table_number=table_number, orders_paid=result.modified_count)
+
+
+# Socket.IO and REST share one port: Socket.IO answers /socket.io/ requests
+# and passes everything else on to the FastAPI app.
+app = socketio.ASGIApp(sio, other_asgi_app=api)
