@@ -25,14 +25,17 @@ async def get_unpaid_orders(table_number: int) -> list[dict]:
     return response.json()
 
 
-async def mark_orders_paid(table_number: int) -> None:
-    """Tell the Order service that the table's unpaid orders are now paid."""
+async def mark_orders_paid(table_number: int, order_ids: list[str]) -> int:
+    """Tell the Order service that these orders are now paid. Returns how many it marked."""
     try:
         async with httpx.AsyncClient(base_url=ORDER_URL, timeout=5) as client:
-            response = await client.post("/orders/pay", params={"table_number": table_number})
+            response = await client.post(
+                "/orders/pay", json={"table_number": table_number, "order_ids": order_ids}
+            )
             response.raise_for_status()
     except httpx.HTTPError as error:
         raise ServiceUnavailable("Order") from error
+    return response.json()["orders_paid"]
 
 
 async def free_table(table_number: int) -> None:

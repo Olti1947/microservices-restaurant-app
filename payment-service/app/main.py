@@ -48,11 +48,16 @@ async def create_payment(body: PaymentCreate):
     if bill.total == 0:
         raise HTTPException(status_code=400, detail=f"Table {body.table_number} has nothing to pay")
 
-    # 1. Mark the orders paid first: if the Order service is down, nothing is recorded.
+    # 1. Mark exactly the orders on this bill as paid. Doing this first means that
+    #    if the Order service is down, nothing is recorded.
+    order_ids = [order.id for order in bill.orders]
     try:
-        await mark_orders_paid(body.table_number)
+        orders_paid = await mark_orders_paid(body.table_number, order_ids)
     except ServiceUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error))
+    if orders_paid != len(order_ids):
+        # Some of these orders were paid in the meantime (for example from another phone).
+        raise HTTPException(status_code=409, detail="The bill changed, please check it again")
 
     # 2. Record the payment.
     # Mongo stores times in milliseconds, so drop the extra precision up front.
@@ -66,11 +71,13 @@ async def create_payment(body: PaymentCreate):
     result = await payments.insert_one(doc)
     doc["_id"] = result.inserted_id
 
-    # 3. Free the table for the next guests.
+    # 3. Free the table for the next guests. The payment already went through, so
+    #    if the Table service is down we still report success; staff can free the
+    #    table later with POST /tables/{number}/free.
     try:
         await free_table(body.table_number)
     except ServiceUnavailable:
-        raise HTTPException(status_code=503, detail="Payment recorded, but the table could not be freed")
+        print(f"Warning: table {body.table_number} was paid but could not be freed")
 
     return to_payment(doc)
 
