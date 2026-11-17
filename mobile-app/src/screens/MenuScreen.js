@@ -1,17 +1,13 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Pressable, SectionList, Text, View } from "react-native";
+import { Platform, Pressable, SectionList, Text, View } from "react-native";
 
-import { api, formatPrice } from "../api";
+import { api } from "../api";
 import Button from "../Button";
 import { useCart } from "../CartContext";
+import { CATEGORIES, categoryOf, emojiFor } from "../food";
+import { formatPrice } from "../format";
 import { colors, styles } from "../styles";
-
-const CATEGORIES = [
-  { key: "starter", title: "Starters" },
-  { key: "main", title: "Mains" },
-  { key: "dessert", title: "Desserts" },
-  { key: "drink", title: "Drinks" },
-];
 
 export default function MenuScreen({ navigation }) {
   const { tableNumber, count, total, add, remove, quantityOf } = useCart();
@@ -27,8 +23,13 @@ export default function MenuScreen({ navigation }) {
     navigation.setOptions({
       title: `Table ${tableNumber}`,
       headerRight: () => (
-        <Pressable onPress={() => navigation.navigate("Orders")}>
-          <Text style={{ color: colors.primary, fontSize: 16 }}>My orders</Text>
+        <Pressable
+          onPress={() => navigation.navigate("Orders")}
+          // On web the header has no right padding of its own.
+          style={{ flexDirection: "row", alignItems: "center", gap: 4, marginRight: Platform.OS === "web" ? 16 : 0 }}
+        >
+          <Ionicons name="receipt-outline" size={20} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>My orders</Text>
         </Pressable>
       ),
     });
@@ -36,7 +37,7 @@ export default function MenuScreen({ navigation }) {
 
   // Group the menu into one section per category.
   const sections = CATEGORIES.map((category) => ({
-    title: category.title,
+    category,
     data: menu.filter((item) => item.category === category.key),
   })).filter((section) => section.data.length > 0);
 
@@ -46,24 +47,33 @@ export default function MenuScreen({ navigation }) {
         contentContainerStyle={styles.content}
         sections={sections}
         keyExtractor={(item) => item.id}
+        stickySectionHeadersEnabled={false}
         ListHeaderComponent={error && <Text style={styles.error}>{error}</Text>}
-        renderSectionHeader={({ section }) => (
-          <Text style={[styles.title, { marginTop: 8, marginBottom: 8 }]}>{section.title}</Text>
+        renderSectionHeader={({ section: { category } }) => (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 10 }}>
+            <View style={[styles.avatar, { width: 32, height: 32, backgroundColor: category.color }]}>
+              <Ionicons name={category.icon} size={18} color="#fff" />
+            </View>
+            <Text style={[styles.title, { fontSize: 20 }]}>{category.title}</Text>
+          </View>
         )}
         renderItem={({ item }) => (
-          <View style={[styles.card, styles.row]}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16 }}>{item.name}</Text>
-              <Text style={styles.muted}>{formatPrice(item.price)}</Text>
+          <View style={[styles.card, styles.row, { gap: 12 }]}>
+            <View style={[styles.avatar, { backgroundColor: categoryOf(item).color + "1f" }]}>
+              <Text style={styles.emoji}>{emojiFor(item)}</Text>
             </View>
-            <View style={[styles.row, { gap: 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.text, { fontWeight: "600" }]}>{item.name}</Text>
+              <Text style={styles.price}>{formatPrice(item.price)}</Text>
+            </View>
+            <View style={[styles.row, { gap: 10 }]}>
               {quantityOf(item) > 0 && (
                 <>
-                  <QuantityButton label="−" onPress={() => remove(item)} />
-                  <Text style={{ fontSize: 16, minWidth: 16, textAlign: "center" }}>{quantityOf(item)}</Text>
+                  <QuantityButton icon="remove" onPress={() => remove(item)} light />
+                  <Text style={[styles.title, { minWidth: 16, textAlign: "center" }]}>{quantityOf(item)}</Text>
                 </>
               )}
-              <QuantityButton label="+" onPress={() => add(item)} />
+              <QuantityButton icon="add" onPress={() => add(item)} />
             </View>
           </View>
         )}
@@ -71,6 +81,7 @@ export default function MenuScreen({ navigation }) {
       {count > 0 && (
         <View style={styles.footer}>
           <Button
+            icon="cart"
             title={`View cart · ${count} item${count === 1 ? "" : "s"} · ${formatPrice(total)}`}
             onPress={() => navigation.navigate("Cart")}
           />
@@ -80,7 +91,7 @@ export default function MenuScreen({ navigation }) {
   );
 }
 
-function QuantityButton({ label, onPress }) {
+function QuantityButton({ icon, onPress, light }) {
   return (
     <Pressable
       onPress={onPress}
@@ -88,12 +99,12 @@ function QuantityButton({ label, onPress }) {
         width: 34,
         height: 34,
         borderRadius: 17,
-        backgroundColor: colors.primary,
+        backgroundColor: light ? colors.border : colors.primary,
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Text style={{ color: "#fff", fontSize: 20, lineHeight: 22 }}>{label}</Text>
+      <Ionicons name={icon} size={20} color={light ? colors.primary : "#fff"} />
     </Pressable>
   );
 }

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
-import { api, formatPrice } from "../api";
+import { api } from "../api";
 import Button from "../Button";
 import { useCart } from "../CartContext";
-import { styles } from "../styles";
+import { formatPrice } from "../format";
+import { colors, styles } from "../styles";
 
 export default function BillScreen({ navigation }) {
   const { tableNumber, setTableNumber } = useCart();
@@ -16,6 +18,11 @@ export default function BillScreen({ navigation }) {
   useEffect(() => {
     api.getBill(tableNumber).then(setBill).catch((e) => setError(e.message));
   }, [tableNumber]);
+
+  // After paying there is nothing to go back to, so hide the back button.
+  useLayoutEffect(() => {
+    if (payment) navigation.setOptions({ title: "Paid", headerBackVisible: false, headerLeft: () => null, gestureEnabled: false });
+  }, [navigation, payment]);
 
   async function pay() {
     setPaying(true);
@@ -36,12 +43,16 @@ export default function BillScreen({ navigation }) {
 
   if (payment) {
     return (
-      <View style={[styles.screen, styles.content, { justifyContent: "center", gap: 16 }]}>
-        <Text style={[styles.title, { fontSize: 24, textAlign: "center" }]}>Thank you!</Text>
-        <Text style={{ textAlign: "center" }}>
-          You paid {formatPrice(payment.amount)} for table {payment.table_number}.
+      <View style={[styles.screen, styles.content, { justifyContent: "center", alignItems: "center", gap: 12 }]}>
+        <Ionicons name="checkmark-circle" size={96} color={colors.green} />
+        <Text style={[styles.title, { fontSize: 26 }]}>Thank you!</Text>
+        <Text style={[styles.text, { textAlign: "center" }]}>
+          You paid <Text style={styles.price}>{formatPrice(payment.amount)}</Text> for table {payment.table_number}.
         </Text>
-        <Button title="Done" onPress={finish} />
+        <Text style={[styles.muted, { marginBottom: 12 }]}>We hope to see you again soon 👋</Text>
+        <View style={{ alignSelf: "stretch" }}>
+          <Button icon="home" title="Done" onPress={finish} />
+        </View>
       </View>
     );
   }
@@ -54,23 +65,35 @@ export default function BillScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.content}>
         {error && <Text style={styles.error}>{error}</Text>}
         {!bill && !error && <Text style={styles.muted}>Loading bill…</Text>}
-        {lines.map((item, index) => (
-          <View key={index} style={[styles.card, styles.row]}>
-            <Text style={{ fontSize: 16 }}>
-              {item.quantity} × {item.name}
-            </Text>
-            <Text>{formatPrice(item.price * item.quantity)}</Text>
-          </View>
-        ))}
         {bill && (
-          <View style={[styles.row, { marginTop: 6 }]}>
-            <Text style={styles.title}>Total</Text>
-            <Text style={styles.title}>{formatPrice(bill.total)}</Text>
+          // Styled like a paper receipt.
+          <View style={[styles.card, { padding: 20 }]}>
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Ionicons name="receipt" size={36} color={colors.primary} />
+              <Text style={[styles.title, { fontSize: 20, marginTop: 4 }]}>Table {bill.table_number}</Text>
+              <Text style={styles.muted}>{new Date().toLocaleDateString()}</Text>
+            </View>
+            <Divider />
+            {lines.length === 0 && <Text style={[styles.muted, { textAlign: "center" }]}>Nothing to pay.</Text>}
+            {lines.map((item, index) => (
+              <View key={index} style={[styles.row, { paddingVertical: 6 }]}>
+                <Text style={styles.text}>
+                  {item.quantity} × {item.name}
+                </Text>
+                <Text style={styles.text}>{formatPrice(item.price * item.quantity)}</Text>
+              </View>
+            ))}
+            <Divider />
+            <View style={styles.row}>
+              <Text style={[styles.title, { fontSize: 20 }]}>Total</Text>
+              <Text style={[styles.title, styles.price, { fontSize: 22 }]}>{formatPrice(bill.total)}</Text>
+            </View>
           </View>
         )}
       </ScrollView>
       <View style={styles.footer}>
         <Button
+          icon="card"
           title={paying ? "Paying…" : bill ? `Pay ${formatPrice(bill.total)}` : "Pay"}
           onPress={pay}
           disabled={paying || !bill || bill.total === 0}
@@ -78,4 +101,8 @@ export default function BillScreen({ navigation }) {
       </View>
     </View>
   );
+}
+
+function Divider() {
+  return <View style={{ borderTopWidth: 2, borderStyle: "dashed", borderColor: colors.border, marginVertical: 12 }} />;
 }

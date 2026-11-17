@@ -6,20 +6,27 @@
   <title>Kitchen</title>
   <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.1/dist/socket.io.min.js"></script>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; background: #f2f2f2; color: #222; }
+    /* Same status colors as the mobile app. */
+    :root { --received: #3d7dd8; --preparing: #f3a712; --ready: #2e8b57; --bg: #fff8f0; --text: #2d2a26; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
     header { display: flex; justify-content: space-between; align-items: center;
-             padding: 12px 20px; background: #222; color: #fff; }
-    header h1 { margin: 0; font-size: 20px; }
-    #connection { font-size: 14px; }
+             padding: 14px 20px; background: #e4572e; color: #fff; }
+    header h1 { margin: 0; font-size: 22px; }
+    #connection { font-size: 14px; background: rgba(255, 255, 255, 0.2); padding: 4px 12px; border-radius: 12px; }
     main { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; }
-    h2 { margin: 0 0 12px; font-size: 16px; text-transform: uppercase; color: #555; }
-    .order { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px;
-             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+    h2 { margin: 0 0 12px; padding: 8px 12px; border-radius: 10px; font-size: 16px; color: #fff;
+         display: flex; justify-content: space-between; align-items: center; }
+    .order { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px;
+             border-left: 6px solid; box-shadow: 0 2px 8px rgba(122, 74, 42, 0.12); }
     .order h3 { margin: 0 0 6px; display: flex; justify-content: space-between; font-size: 18px; }
-    .order time { font-size: 13px; font-weight: normal; color: #777; }
+    .order time { font-size: 13px; font-weight: normal; color: #8a817c; }
     .order ul { margin: 0 0 10px; padding-left: 18px; }
-    .order button { width: 100%; padding: 8px; border: 0; border-radius: 6px; font-size: 15px;
-                    cursor: pointer; color: #fff; background: #2a7d4f; }
+    .order button { width: 100%; padding: 9px; border: 0; border-radius: 8px; font-size: 15px;
+                    font-weight: 600; cursor: pointer; color: #fff; }
+    .order button:hover { filter: brightness(0.9); }
+    .received { border-color: var(--received); } .received button, h2.received { background: var(--received); }
+    .preparing { border-color: var(--preparing); } .preparing button, h2.preparing { background: var(--preparing); }
+    .ready { border-color: var(--ready); } .ready button, h2.ready { background: var(--ready); }
     .new { animation: flash 1.5s; }
     @keyframes flash { from { background: #fff3b0; } to { background: #fff; } }
     @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
@@ -27,13 +34,13 @@
 </head>
 <body>
   <header>
-    <h1>Kitchen orders</h1>
+    <h1>👨‍🍳 Kitchen orders</h1>
     <span id="connection">Connecting…</span>
   </header>
   <main>
-    <section><h2>Received</h2><div id="received"></div></section>
-    <section><h2>Preparing</h2><div id="preparing"></div></section>
-    <section><h2>Ready</h2><div id="ready"></div></section>
+    <section><h2 class="received">🧾 Received <span id="received-count"></span></h2><div id="received"></div></section>
+    <section><h2 class="preparing">🔥 Preparing <span id="preparing-count"></span></h2><div id="preparing"></div></section>
+    <section><h2 class="ready">🔔 Ready <span id="ready-count"></span></h2><div id="ready"></div></section>
   </main>
 
   <script>
@@ -60,11 +67,14 @@
         const column = document.getElementById(order.status);
         if (column) column.appendChild(orderCard(order));
       }
+      for (const status of Object.keys(NEXT)) {
+        document.getElementById(`${status}-count`).textContent = sorted.filter((o) => o.status === status).length;
+      }
     }
 
     function orderCard(order) {
       const card = document.createElement("div");
-      card.className = order.isNew ? "order new" : "order";
+      card.className = `order ${order.status}` + (order.isNew ? " new" : "");
       order.isNew = false;
 
       const time = new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

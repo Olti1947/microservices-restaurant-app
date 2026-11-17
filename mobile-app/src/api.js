@@ -36,7 +36,3 @@ export const api = {
       body: JSON.stringify({ table_number: tableNumber }),
     }),
 };
-
-export function formatPrice(euros) {
-  return `€${euros.toFixed(2)}`;
-}
