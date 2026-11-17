@@ -1,21 +1,52 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { AppState, FlatList, Pressable, Text, View } from "react-native";
 
 import { api } from "../api";
 import { useCart } from "../CartContext";
 import { colors, styles } from "../styles";
 
+// Other diners take and free tables too, so reload the list regularly.
+const REFRESH_EVERY_MS = 2 * 60 * 1000;
+
 export default function TablesScreen({ navigation }) {
   const { setTableNumber, clear } = useCart();
   const [tables, setTables] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    api.getTables().then(setTables).catch((e) => setError(e.message));
+  const loadTables = useCallback(async () => {
+    try {
+      setTables(await api.getTables());
+    } catch (e) {
+      setError(e.message);
+    }
   }, []);
 
+  // Load now, then every 2 minutes, and whenever the app comes back to the foreground.
+  // The timer stops when the diner leaves this screen.
+  useEffect(() => {
+    loadTables();
+    const timer = setInterval(loadTables, REFRESH_EVERY_MS);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") loadTables();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+    };
+  }, [loadTables]);
+
+  // Pull down on the list to reload it by hand.
+  async function refresh() {
+    setRefreshing(true);
+    setError(null);
+    await loadTables();
+    setRefreshing(false);
+  }
+
   async function chooseTable(table) {
+    setError(null);
     try {
       // A free table gets occupied. An occupied table can be re-joined,
       // for example after the app was restarted during the meal.
@@ -25,6 +56,8 @@ export default function TablesScreen({ navigation }) {
       navigation.reset({ index: 0, routes: [{ name: "Menu" }] });
     } catch (e) {
       setError(e.message);
+      // Most likely someone else just took this table: show the real status.
+      loadTables();
     }
   }
 
@@ -36,6 +69,8 @@ export default function TablesScreen({ navigation }) {
         keyExtractor={(table) => table.id}
         numColumns={2}
         columnWrapperStyle={{ gap: 12 }}
+        refreshing={refreshing}
+        onRefresh={refresh}
         ListHeaderComponent={
           <>
             <View style={{ alignItems: "center", marginVertical: 12 }}>
