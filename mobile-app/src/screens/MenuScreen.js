@@ -10,7 +10,7 @@ import { formatPrice } from "../format";
 import { colors, styles } from "../styles";
 
 export default function MenuScreen({ navigation }) {
-  const { tableNumber, count, total, add, remove, quantityOf } = useCart();
+  const { tableNumber, setTableNumber, count, total, add, remove, quantityOf, clear } = useCart();
   const [menu, setMenu] = useState([]);
   const [error, setError] = useState(null);
 
@@ -18,10 +18,38 @@ export default function MenuScreen({ navigation }) {
     api.getMenu().then(setMenu).catch((e) => setError(e.message));
   }, []);
 
-  // Header shows the table and a link to the orders already placed.
+  // Go back to the table list. Only allowed while nothing has been ordered,
+  // otherwise the orders would be left behind on a free table.
+  async function leaveTable() {
+    try {
+      const openOrders = await api.getOpenOrders(tableNumber);
+      if (openOrders.length > 0) {
+        setError("You already ordered at this table. Please pay the bill before changing tables.");
+        return;
+      }
+      await api.freeTable(tableNumber);
+      setTableNumber(null);
+      clear();
+      navigation.reset({ index: 0, routes: [{ name: "Tables" }] });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  // Header: back to the tables on the left, the orders already placed on the right.
   useLayoutEffect(() => {
     navigation.setOptions({
       title: `Table ${tableNumber}`,
+      headerLeft: () => (
+        <Pressable
+          onPress={leaveTable}
+          // On web the header has no left padding of its own.
+          style={{ flexDirection: "row", alignItems: "center", gap: 4, marginLeft: Platform.OS === "web" ? 16 : 0 }}
+        >
+          <Ionicons name="chevron-back" size={22} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>Tables</Text>
+        </Pressable>
+      ),
       headerRight: () => (
         <Pressable
           onPress={() => navigation.navigate("Orders")}
@@ -43,12 +71,21 @@ export default function MenuScreen({ navigation }) {
 
   return (
     <View style={styles.screen}>
+      {error && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, margin: 16, marginBottom: 0, padding: 12,
+          borderRadius: 12, backgroundColor: colors.error + "1a" }}>
+          <Ionicons name="alert-circle" size={20} color={colors.error} />
+          <Text style={{ color: colors.error, flex: 1 }}>{error}</Text>
+          <Pressable onPress={() => setError(null)}>
+            <Ionicons name="close" size={20} color={colors.error} />
+          </Pressable>
+        </View>
+      )}
       <SectionList
         contentContainerStyle={styles.content}
         sections={sections}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={false}
-        ListHeaderComponent={error && <Text style={styles.error}>{error}</Text>}
         renderSectionHeader={({ section: { category } }) => (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8, marginBottom: 10 }}>
             <View style={[styles.avatar, { width: 32, height: 32, backgroundColor: category.color }]}>

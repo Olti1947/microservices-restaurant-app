@@ -18,6 +18,7 @@ async function request(url, options = {}) {
 export const api = {
   getTables: () => request(`${TABLE_URL}/tables`),
   occupyTable: (number) => request(`${TABLE_URL}/tables/${number}/occupy`, { method: "POST" }),
+  freeTable: (number) => request(`${TABLE_URL}/tables/${number}/free`, { method: "POST" }),
 
   getMenu: () => request(`${MENU_URL}/menu`),
 
