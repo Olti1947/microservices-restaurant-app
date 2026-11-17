@@ -1,12 +1,33 @@
 import { StyleSheet } from "react-native";
 
+// Warm restaurant colors used across the app.
 export const colors = {
-  primary: "#2a7d4f",
-  background: "#f4f4f4",
+  primary: "#e4572e", // tomato
+  primaryDark: "#b8401f",
+  accent: "#f3a712", // saffron
+  green: "#2e8b57",
+  background: "#fff8f0", // cream
   card: "#ffffff",
-  text: "#222222",
-  muted: "#777777",
+  text: "#2d2a26",
+  muted: "#8a817c",
+  border: "#f0e4d7",
   error: "#c0392b",
+};
+
+// One color per order status, shared with the kitchen screen.
+export const statusColors = {
+  received: "#3d7dd8",
+  preparing: "#f3a712",
+  ready: "#2e8b57",
+  served: "#6c5b7b",
+};
+
+const shadow = {
+  shadowColor: "#7a4a2a",
+  shadowOpacity: 0.08,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
 };
 
 // Styles shared by several screens.
@@ -15,21 +36,27 @@ export const styles = StyleSheet.create({
   content: { padding: 16 },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 10,
+    marginBottom: 12,
+    ...shadow,
   },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: 17, fontWeight: "600", color: colors.text },
+  title: { fontSize: 17, fontWeight: "700", color: colors.text },
+  text: { fontSize: 16, color: colors.text },
   muted: { color: colors.muted },
+  price: { color: colors.primary, fontWeight: "600" },
   error: { color: colors.error, marginBottom: 10 },
-  button: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
+  footer: {
+    padding: 16,
+    paddingBottom: 24,
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    ...shadow,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  footer: { padding: 16, backgroundColor: colors.card, borderTopWidth: 1, borderColor: "#e5e5e5" },
+  // Round colored circle with an emoji or icon in the middle.
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  emoji: { fontSize: 26 },
+  pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: "flex-start" },
 });
