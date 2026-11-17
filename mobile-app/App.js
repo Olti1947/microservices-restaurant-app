@@ -17,6 +17,7 @@ const headerOptions = {
   headerStyle: { backgroundColor: colors.primary },
   headerTintColor: "#fff",
   headerTitleStyle: { fontWeight: "700" },
+  headerTitleAlign: "center",
   headerShadowVisible: false,
   contentStyle: { backgroundColor: colors.background },
 };
